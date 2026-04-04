@@ -62,7 +62,7 @@ class KingAlgorithmServiceTests(TestCase):
 
         iterations, row_order, col_order = apply_king_ordering(matrix)
 
-        self.assertEqual(iterations, 2)
+        self.assertEqual(iterations, 1)
         self.assertEqual(row_order[:2], [0, 1])
         self.assertEqual(col_order[:2], [0, 1])
 

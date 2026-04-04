@@ -1,6 +1,7 @@
 import io
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 from django.db import transaction
 
@@ -54,81 +55,196 @@ def _reorder_matrix(matrix, row_order, col_order):
     return [[matrix[row_idx][col_idx] for col_idx in col_order] for row_idx in row_order]
 
 
-def _binary_equivalent(bits):
-    return sum(int(bit) * (2 ** (len(bits) - index - 1)) for index, bit in enumerate(bits))
+class KingROC:
+    def __init__(self, matrix, machine_names=None, product_names=None):
+        self.matrix = np.array(matrix, dtype=int).copy()
+        self.n_machines, self.n_products = self.matrix.shape if self.matrix.size else (0, 0)
+        self.machine_names = machine_names if machine_names else [f"M{i + 1}" for i in range(self.n_machines)]
+        self.product_names = product_names if product_names else [f"P{j + 1}" for j in range(self.n_products)]
+        self.history = []
+
+    def calculate_row_weights(self):
+        col_weights = 2 ** np.arange(self.n_products - 1, -1, -1)
+        return np.sum(self.matrix * col_weights, axis=1)
+
+    def sort_rows(self):
+        row_ed = self.calculate_row_weights()
+        sorted_indices = np.argsort(-row_ed, kind="stable")
+        return sorted_indices, row_ed[sorted_indices]
+
+    def calculate_column_weights(self):
+        row_weights = 2 ** np.arange(self.n_machines - 1, -1, -1)
+        return np.sum(self.matrix.T * row_weights, axis=1)
+
+    def sort_columns(self):
+        col_ed = self.calculate_column_weights()
+        sorted_indices = np.argsort(-col_ed, kind="stable")
+        return sorted_indices, col_ed[sorted_indices]
+
+    def cluster(self, max_iterations=10):
+        iteration = 0
+        previous_machine_names = list(self.machine_names)
+        previous_product_names = list(self.product_names)
+
+        while iteration < max_iterations:
+            row_order, row_ed = self.sort_rows()
+            self.matrix = self.matrix[row_order]
+            self.machine_names = [self.machine_names[index] for index in row_order]
+
+            col_order, col_ed = self.sort_columns()
+            self.matrix = self.matrix[:, col_order]
+            self.product_names = [self.product_names[index] for index in col_order]
+            iteration += 1
+
+            self.history.append(
+                {
+                    "iteration": iteration,
+                    "row_order": row_order.tolist(),
+                    "column_order": col_order.tolist(),
+                    "row_ed": row_ed.tolist(),
+                    "column_ed": col_ed.tolist(),
+                }
+            )
+
+            if self.machine_names == previous_machine_names and self.product_names == previous_product_names:
+                break
+
+            previous_machine_names = list(self.machine_names)
+            previous_product_names = list(self.product_names)
+
+        return iteration, self.matrix.copy(), list(self.machine_names), list(self.product_names)
+
+    def identify_cells(self):
+        cells = []
+        used_machines = set()
+
+        for machine_index in range(self.n_machines):
+            if machine_index in used_machines:
+                continue
+
+            machine_products = {product_index for product_index in range(self.n_products) if self.matrix[machine_index, product_index] == 1}
+            if not machine_products:
+                continue
+
+            cell_machines = {machine_index}
+            cell_products = set(machine_products)
+            changed = True
+
+            while changed:
+                changed = False
+                for candidate_machine in range(self.n_machines):
+                    if candidate_machine in cell_machines:
+                        continue
+                    if any(self.matrix[candidate_machine, product_index] == 1 for product_index in cell_products):
+                        cell_machines.add(candidate_machine)
+                        for product_index in range(self.n_products):
+                            if self.matrix[candidate_machine, product_index] == 1 and product_index not in cell_products:
+                                cell_products.add(product_index)
+                                changed = True
+
+            sub_cells = self.split_cell(cell_machines, cell_products)
+            if sub_cells:
+                cells.extend(sub_cells)
+            else:
+                cells.append(self._build_cell(cell_machines, cell_products))
+
+            used_machines.update(cell_machines)
+
+        if not cells:
+            return []
+
+        cells.sort(key=lambda cell: min(cell["machines"]))
+        return cells
+
+    def split_cell(self, machines, products):
+        if len(machines) <= 1:
+            return []
+
+        machine_list = sorted(machines)
+        product_list = sorted(products)
+        sub_matrix = self.matrix[np.ix_(machine_list, product_list)]
+        similarity = np.zeros((len(machine_list), len(machine_list)))
+
+        for row_index in range(len(machine_list)):
+            for column_index in range(len(machine_list)):
+                if row_index == column_index:
+                    continue
+                common = np.sum(np.logical_and(sub_matrix[row_index], sub_matrix[column_index]))
+                total = np.sum(np.logical_or(sub_matrix[row_index], sub_matrix[column_index]))
+                if total > 0:
+                    similarity[row_index, column_index] = common / total
+
+        groups = []
+        visited = set()
+        for machine_index in range(len(machine_list)):
+            if machine_index in visited:
+                continue
+            group = {machine_index}
+            for candidate_index in range(len(machine_list)):
+                if candidate_index not in group and similarity[machine_index, candidate_index] > 0.5:
+                    group.add(candidate_index)
+            if len(group) < len(machine_list):
+                groups.append(group)
+                visited.update(group)
+
+        if len(groups) <= 1:
+            return []
+
+        return [
+            self._build_cell(
+                {machine_list[index] for index in group},
+                {
+                    product_index
+                    for index in group
+                    for product_index in product_list
+                    if self.matrix[machine_list[index], product_index] == 1
+                },
+            )
+            for group in groups
+        ]
+
+    def _build_cell(self, machines, products):
+        machine_list = sorted(machines)
+        product_list = sorted(products)
+        return {
+            "machines": machine_list,
+            "products": product_list,
+            "machine_names": [self.machine_names[index] for index in machine_list],
+            "product_names": [self.product_names[index] for index in product_list],
+        }
 
 
-def _column_bits(matrix, column_index):
-    return [row[column_index] for row in matrix]
-
-
-def apply_king_ordering(matrix, max_iterations=50):
+def apply_king_ordering(matrix, max_iterations=10):
     if not matrix:
         return 0, [], []
 
-    row_order = list(range(len(matrix)))
-    col_order = list(range(len(matrix[0]))) if matrix[0] else []
-    current = [row[:] for row in matrix]
-    previous_row_order = None
-    previous_col_order = None
-
-    for iteration in range(1, max_iterations + 1):
-        row_weights = [_binary_equivalent(row) for row in current]
-        sorted_rows = sorted(range(len(current)), key=lambda idx: row_weights[idx], reverse=True)
-        current = [current[idx] for idx in sorted_rows]
-        row_order = [row_order[idx] for idx in sorted_rows]
-
-        if current and current[0]:
-            col_weights = [_binary_equivalent(_column_bits(current, col_idx)) for col_idx in range(len(current[0]))]
-            sorted_cols = sorted(range(len(current[0])), key=lambda idx: col_weights[idx], reverse=True)
-            current = [[row[col_idx] for col_idx in sorted_cols] for row in current]
-            col_order = [col_order[idx] for idx in sorted_cols]
-
-        if previous_row_order == row_order and previous_col_order == col_order:
-            return iteration, row_order, col_order
-
-        previous_row_order = row_order[:]
-        previous_col_order = col_order[:]
-
-    return max_iterations, row_order, col_order
+    machine_names = [str(index) for index in range(len(matrix))]
+    product_names = [str(index) for index in range(len(matrix[0]))] if matrix[0] else []
+    roc = KingROC(matrix, machine_names=machine_names, product_names=product_names)
+    iterations, _, ordered_machine_names, ordered_product_names = roc.cluster(max_iterations=max_iterations)
+    row_order = [int(name) for name in ordered_machine_names]
+    col_order = [int(name) for name in ordered_product_names]
+    return iterations, row_order, col_order
 
 
-def detect_cell_blocks(ordered_matrix):
-    row_ranges = []
-    for row_idx, row in enumerate(ordered_matrix):
-        ones = [idx for idx, value in enumerate(row) if value == 1]
-        if ones:
-            row_ranges.append((row_idx, min(ones), max(ones)))
-
-    if not row_ranges:
-        return []
-
+def detect_cell_blocks_from_cells(cells):
     blocks = []
-    current = {
-        "row_start": row_ranges[0][0],
-        "row_end": row_ranges[0][0],
-        "column_start": row_ranges[0][1],
-        "column_end": row_ranges[0][2],
-    }
-
-    for row_idx, col_start, col_end in row_ranges[1:]:
-        overlaps = col_start <= current["column_end"] + 1 and col_end >= current["column_start"] - 1
-        if overlaps:
-            current["row_end"] = row_idx
-            current["column_start"] = min(current["column_start"], col_start)
-            current["column_end"] = max(current["column_end"], col_end)
-        else:
-            blocks.append(current)
-            current = {
-                "row_start": row_idx,
-                "row_end": row_idx,
-                "column_start": col_start,
-                "column_end": col_end,
+    for index, cell in enumerate(cells, start=1):
+        row_start = min(cell["machines"])
+        row_end = max(cell["machines"])
+        column_start = min(cell["products"])
+        column_end = max(cell["products"])
+        blocks.append(
+            {
+                "row_start": row_start,
+                "row_end": row_end,
+                "column_start": column_start,
+                "column_end": column_end,
+                "cell_index": index,
+                "machines": cell["machine_names"],
+                "products": cell["product_names"],
             }
-
-    blocks.append(current)
-    for index, block in enumerate(blocks, start=1):
-        block["cell_index"] = index
+        )
     return blocks
 
 
@@ -170,13 +286,20 @@ def run_king_analysis(company):
     if not machines or not products:
         raise ValueError("At least one machine and one product with gammes are required.")
 
-    iterations, row_order, col_order = apply_king_ordering(matrix)
-    ordered_matrix = _reorder_matrix(matrix, row_order, col_order)
-    blocks = detect_cell_blocks(ordered_matrix)
+    roc = KingROC(
+        matrix,
+        machine_names=[machine.code for machine in machines],
+        product_names=[product.reference for product in products],
+    )
+    iterations, ordered_matrix_np, ordered_machine_codes, ordered_product_codes = roc.cluster(max_iterations=10)
+    ordered_matrix = ordered_matrix_np.tolist()
+    cells = roc.identify_cells()
+    blocks = detect_cell_blocks_from_cells(cells)
     exceptional, voids, efficiency = score_cells(ordered_matrix, blocks)
-
-    ordered_machines = [machines[idx] for idx in row_order]
-    ordered_products = [products[idx] for idx in col_order]
+    machine_lookup = {machine.code: machine for machine in machines}
+    ordered_machines = [machine_lookup[machine_code] for machine_code in ordered_machine_codes]
+    ordered_products_lookup = {product.reference: product for product in products}
+    ordered_products = [ordered_products_lookup[product_code] for product_code in ordered_product_codes]
 
     analysis = KingAnalysis.objects.create(
         company=company,
@@ -191,10 +314,8 @@ def run_king_analysis(company):
         efficiency=efficiency,
     )
 
-    machine_lookup = {machine.code: machine for machine in ordered_machines}
     for block in blocks:
-        machine_codes = analysis.machine_order[block["row_start"] : block["row_end"] + 1]
-        for machine_code in machine_codes:
+        for machine_code in block["machines"]:
             machine = machine_lookup[machine_code]
             machine.current_cell = block["cell_index"]
             machine.save(update_fields=["current_cell", "updated_at"])
