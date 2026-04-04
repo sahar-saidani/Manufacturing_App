@@ -54,6 +54,14 @@ def _reorder_matrix(matrix, row_order, col_order):
     return [[matrix[row_idx][col_idx] for col_idx in col_order] for row_idx in row_order]
 
 
+def _binary_equivalent(bits):
+    return sum(int(bit) * (2 ** (len(bits) - index - 1)) for index, bit in enumerate(bits))
+
+
+def _column_bits(matrix, column_index):
+    return [row[column_index] for row in matrix]
+
+
 def apply_king_ordering(matrix, max_iterations=50):
     if not matrix:
         return 0, [], []
@@ -61,38 +69,26 @@ def apply_king_ordering(matrix, max_iterations=50):
     row_order = list(range(len(matrix)))
     col_order = list(range(len(matrix[0]))) if matrix[0] else []
     current = [row[:] for row in matrix]
+    previous_row_order = None
+    previous_col_order = None
 
     for iteration in range(1, max_iterations + 1):
-        row_weights = [_binary_weight(row) for row in current]
-        sorted_rows = sorted(
-            range(len(current)),
-            key=lambda idx: (row_weights[idx], current[idx]),
-            reverse=True,
-        )
+        row_weights = [_binary_equivalent(row) for row in current]
+        sorted_rows = sorted(range(len(current)), key=lambda idx: row_weights[idx], reverse=True)
         current = [current[idx] for idx in sorted_rows]
         row_order = [row_order[idx] for idx in sorted_rows]
 
         if current and current[0]:
-            col_weights = []
-            for col_idx in range(len(current[0])):
-                col_weights.append(_binary_weight([current[row_idx][col_idx] for row_idx in range(len(current))]))
-            sorted_cols = sorted(
-                range(len(current[0])),
-                key=lambda idx: (col_weights[idx], [current[row_idx][idx] for row_idx in range(len(current))]),
-                reverse=True,
-            )
+            col_weights = [_binary_equivalent(_column_bits(current, col_idx)) for col_idx in range(len(current[0]))]
+            sorted_cols = sorted(range(len(current[0])), key=lambda idx: col_weights[idx], reverse=True)
             current = [[row[col_idx] for col_idx in sorted_cols] for row in current]
             col_order = [col_order[idx] for idx in sorted_cols]
 
-        new_row_weights = [_binary_weight(row) for row in current]
-        new_col_weights = [
-            _binary_weight([current[row_idx][col_idx] for row_idx in range(len(current))])
-            for col_idx in range(len(current[0]))
-        ] if current and current[0] else []
-        row_stable = new_row_weights == sorted(new_row_weights, reverse=True)
-        col_stable = new_col_weights == sorted(new_col_weights, reverse=True)
-        if row_stable and col_stable:
+        if previous_row_order == row_order and previous_col_order == col_order:
             return iteration, row_order, col_order
+
+        previous_row_order = row_order[:]
+        previous_col_order = col_order[:]
 
     return max_iterations, row_order, col_order
 
@@ -333,8 +329,8 @@ def import_company_data(company, uploaded_file):
                             "operation_name": str(row.get("operation_name", "")).strip(),
                             "duration_minutes": float(row.get("duration_minutes", 0) or 0),
                         },
-                        )
-                        imported["routes"] += 1
+                    )
+                    imported["routes"] += 1
                 else:
                     gamme_value = _first_non_empty(row, ["gamme", "routing", "route"])
                     if not gamme_value:

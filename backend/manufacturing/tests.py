@@ -6,7 +6,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from .models import Company, Machine, MaterialFlow, OperationRoute, Product
-from .services import run_king_analysis
+from .services import apply_king_ordering, run_king_analysis
 
 
 class KingAlgorithmServiceTests(TestCase):
@@ -35,6 +35,36 @@ class KingAlgorithmServiceTests(TestCase):
         self.assertTrue(any(block["cell_index"] == 1 for block in analysis.cell_blocks))
         self.machine_a.refresh_from_db()
         self.assertIsNotNone(self.machine_a.current_cell)
+
+    def test_apply_king_ordering_matches_course_example(self):
+        matrix = [
+            [1, 0, 0, 0, 0, 0],
+            [0, 1, 0, 1, 0, 1],
+            [0, 1, 0, 1, 1, 0],
+            [1, 0, 1, 0, 0, 0],
+            [0, 1, 0, 0, 0, 1],
+            [1, 0, 1, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1],
+        ]
+
+        iterations, row_order, col_order = apply_king_ordering(matrix)
+
+        self.assertEqual(iterations, 2)
+        self.assertEqual(row_order, [3, 5, 0, 2, 1, 4, 6])
+        self.assertEqual(col_order, [0, 2, 1, 3, 4, 5])
+
+    def test_apply_king_ordering_preserves_order_on_equal_decimal_values(self):
+        matrix = [
+            [1, 1, 0],
+            [1, 1, 0],
+            [0, 0, 1],
+        ]
+
+        iterations, row_order, col_order = apply_king_ordering(matrix)
+
+        self.assertEqual(iterations, 2)
+        self.assertEqual(row_order[:2], [0, 1])
+        self.assertEqual(col_order[:2], [0, 1])
 
 
 class ManufacturingApiTests(TestCase):
