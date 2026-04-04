@@ -1,0 +1,32 @@
+# Django Backend Requirements
+# Installation: pip install -r requirements.txt
+
+# Django Core
+Django>=4.2,<5.0
+djangorestframework>=3.14.0
+
+# Database
+psycopg2-binary>=2.9.9  # PostgreSQL adapter
+
+# CORS Support
+django-cors-headers>=4.3.0
+
+# Data Processing
+pandas>=2.1.0
+openpyxl>=3.1.0  # Excel support
+xlrd>=2.0.1      # Old Excel format (.xls)
+
+# Optional: Advanced Features
+numpy>=1.24.0              # For numerical operations
+django-filter>=23.0        # Advanced filtering
+drf-yasg>=1.21.7          # API documentation (Swagger)
+python-dotenv>=1.0.0      # Environment variables
+
+# Development Tools
+ipython>=8.12.0           # Better shell
+django-extensions>=3.2.0  # Management commands
+
+# Production (optional)
+gunicorn>=21.2.0          # WSGI server
+whitenoise>=6.6.0         # Static files
+dj-database-url>=2.1.0    # Database URL parsing
