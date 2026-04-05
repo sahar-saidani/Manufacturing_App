@@ -216,18 +216,16 @@ class KingROC:
 
 def methode_king(matrice_initiale, machine_names=None, product_names=None, max_iterations=50):
     matrice = np.array(matrice_initiale, dtype=int)
-    anc_matrice = None
     iterations = 0
     ordered_machine_names = list(machine_names) if machine_names else [f"M{i + 1}" for i in range(matrice.shape[0])]
     ordered_product_names = list(product_names) if product_names else [f"P{j + 1}" for j in range(matrice.shape[1])]
-    anc_ordre_lignes = None
-    anc_ordre_cols = None
+    anc_ordre_lignes = list(ordered_machine_names)
+    anc_ordre_cols = list(ordered_product_names)
 
     while True:
         if iterations >= max_iterations:
             break
 
-        anc_matrice = matrice.copy()
         n_lignes, n_cols = matrice.shape
         poids_cols = [2 ** (n_cols - 1 - j) for j in range(n_cols)]
 
@@ -259,9 +257,6 @@ def methode_king(matrice_initiale, machine_names=None, product_names=None, max_i
         lignes_stables = anc_ordre_lignes == ordered_machine_names
         colonnes_stables = anc_ordre_cols == ordered_product_names
         if lignes_stables and colonnes_stables:
-            break
-
-        if np.array_equal(matrice, anc_matrice):
             break
 
         anc_ordre_lignes = list(ordered_machine_names)
