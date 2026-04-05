@@ -214,14 +214,62 @@ class KingROC:
         }
 
 
+def methode_king(matrice_initiale, machine_names=None, product_names=None, max_iterations=50):
+    matrice = np.array(matrice_initiale, dtype=int)
+    anc_matrice = None
+    iterations = 0
+    ordered_machine_names = list(machine_names) if machine_names else [f"M{i + 1}" for i in range(matrice.shape[0])]
+    ordered_product_names = list(product_names) if product_names else [f"P{j + 1}" for j in range(matrice.shape[1])]
+
+    while not np.array_equal(matrice, anc_matrice):
+        if iterations >= max_iterations:
+            break
+
+        anc_matrice = matrice.copy()
+
+        n_lignes, n_cols = matrice.shape
+        poids_cols = [2 ** (n_cols - 1 - j) for j in range(n_cols)]
+
+        ed_lignes = []
+        for i in range(n_lignes):
+            ed_i = sum(matrice[i, j] * poids_cols[j] for j in range(n_cols))
+            ed_lignes.append((ed_i, i))
+
+        ed_lignes.sort(key=lambda x: x[0], reverse=True)
+        nouvel_ordre_lignes = [x[1] for x in ed_lignes]
+        matrice = matrice[nouvel_ordre_lignes, :]
+        ordered_machine_names = [ordered_machine_names[index] for index in nouvel_ordre_lignes]
+
+        n_lignes, n_cols = matrice.shape
+        poids_lignes = [2 ** (n_lignes - 1 - i) for i in range(n_lignes)]
+
+        ed_cols = []
+        for j in range(n_cols):
+            ed_j = sum(matrice[i, j] * poids_lignes[i] for i in range(n_lignes))
+            ed_cols.append((ed_j, j))
+
+        ed_cols.sort(key=lambda x: x[0], reverse=True)
+        nouvel_ordre_cols = [x[1] for x in ed_cols]
+        matrice = matrice[:, nouvel_ordre_cols]
+        ordered_product_names = [ordered_product_names[index] for index in nouvel_ordre_cols]
+
+        iterations += 1
+
+    return iterations, matrice, ordered_machine_names, ordered_product_names
+
+
 def apply_king_ordering(matrix, max_iterations=10):
     if not matrix:
         return 0, [], []
 
     machine_names = [str(index) for index in range(len(matrix))]
     product_names = [str(index) for index in range(len(matrix[0]))] if matrix[0] else []
-    roc = KingROC(matrix, machine_names=machine_names, product_names=product_names)
-    iterations, _, ordered_machine_names, ordered_product_names = roc.cluster(max_iterations=max_iterations)
+    iterations, _, ordered_machine_names, ordered_product_names = methode_king(
+        matrix,
+        machine_names=machine_names,
+        product_names=product_names,
+        max_iterations=max_iterations,
+    )
     row_order = [int(name) for name in ordered_machine_names]
     col_order = [int(name) for name in ordered_product_names]
     return iterations, row_order, col_order
@@ -286,13 +334,18 @@ def run_king_analysis(company):
     if not machines or not products:
         raise ValueError("At least one machine and one product with gammes are required.")
 
-    roc = KingROC(
+    iterations, ordered_matrix_np, ordered_machine_codes, ordered_product_codes = methode_king(
         matrix,
         machine_names=[machine.code for machine in machines],
         product_names=[product.reference for product in products],
+        max_iterations=50,
     )
-    iterations, ordered_matrix_np, ordered_machine_codes, ordered_product_codes = roc.cluster(max_iterations=10)
     ordered_matrix = ordered_matrix_np.tolist()
+    roc = KingROC(
+        ordered_matrix,
+        machine_names=ordered_machine_codes,
+        product_names=ordered_product_codes,
+    )
     cells = roc.identify_cells()
     blocks = detect_cell_blocks_from_cells(cells)
     exceptional, voids, efficiency = score_cells(ordered_matrix, blocks)
