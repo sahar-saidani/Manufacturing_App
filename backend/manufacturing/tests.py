@@ -144,6 +144,51 @@ class ManufacturingApiTests(TestCase):
         self.assertEqual(product.routes.count(), 2)
         self.assertTrue(Machine.objects.filter(company=self.company, code="M1", name="Decoupe").exists())
 
+    def test_import_endpoint_accepts_line_product_gamme_circuits_lot_format(self):
+        payload = io.BytesIO()
+        with pd.ExcelWriter(payload, engine="openpyxl") as writer:
+            pd.DataFrame(
+                [
+                    {"poste": "A", "fonction": "Bobinage", "description": ""},
+                    {"poste": "B", "fonction": "Soudure", "description": ""},
+                    {"poste": "C", "fonction": "Controle", "description": ""},
+                    {"poste": "D", "fonction": "Montage", "description": ""},
+                    {"poste": "E", "fonction": "AQL", "description": ""},
+                    {"poste": "F", "fonction": "Vernissage", "description": ""},
+                    {"poste": "G", "fonction": "Nettoyage", "description": ""},
+                ]
+            ).to_excel(writer, sheet_name="Machines", index=False)
+            pd.DataFrame(
+                [
+                    {"ligne": "AVL", "produit": "23-0029-00", "gamme": "B", "circuits/lot": 50},
+                    {"ligne": "AVL", "produit": "26-0027-00", "gamme": "D-F", "circuits/lot": 16},
+                    {"ligne": "AVL", "produit": "26-0028-00", "gamme": "C-D-E", "circuits/lot": 16},
+                    {"ligne": "AVL", "produit": "26-0022-00", "gamme": "A-G", "circuits/lot": 25},
+                ]
+            ).to_excel(writer, sheet_name="Gammes", index=False)
+
+        upload = SimpleUploadedFile(
+            "manufacturing_real.xlsx",
+            payload.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response = self.client.post(
+            f"/api/companies/{self.company.pk}/import/",
+            {"file": upload},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Product.objects.get(company=self.company, reference="23-0029-00").batch_size, 50)
+        self.assertEqual(
+            [route.machine.code for route in Product.objects.get(company=self.company, reference="26-0027-00").routes.order_by("operation_order")],
+            ["D", "F"],
+        )
+        self.assertEqual(
+            [route.machine.code for route in Product.objects.get(company=self.company, reference="26-0022-00").routes.order_by("operation_order")],
+            ["A", "G"],
+        )
+
     def test_run_king_endpoint_creates_analysis(self):
         response = self.client.post(f"/api/companies/{self.company.pk}/run-king/")
 

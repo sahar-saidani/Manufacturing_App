@@ -393,7 +393,10 @@ def run_king_analysis(company):
 
 
 def _normalize_columns(dataframe):
-    dataframe.columns = [str(col).strip().lower().replace(" ", "_") for col in dataframe.columns]
+    dataframe.columns = [
+        str(col).strip().lower().replace(" ", "_").replace("/", "_").replace("\\", "_")
+        for col in dataframe.columns
+    ]
     return dataframe
 
 
@@ -477,7 +480,7 @@ def import_company_data(company, uploaded_file):
 
         has_product_header = bool({"reference", "name", "produit"}.intersection(columns))
         has_route_columns = {"product_reference", "machine_code", "operation_order"}.issubset(columns)
-        has_gamme_column = any(col in columns for col in ["gamme", "routing", "route", "circuit"])
+        has_gamme_column = any(col in columns for col in ["gamme", "routing", "route"])
         if has_route_columns or (has_product_header and has_gamme_column):
             for _, row in dataframe.iterrows():
                 reference = _first_non_empty(row, ["product_reference", "reference", "produit"])
@@ -489,7 +492,11 @@ def import_company_data(company, uploaded_file):
                     reference=reference,
                     defaults={
                         "name": _first_non_empty(row, ["name", "produit"], default=reference),
-                        "batch_size": _parse_numeric(row.get("batch_size", row.get("lot", 1)), default=1, cast_type=int),
+                        "batch_size": _parse_numeric(
+                            row.get("batch_size", row.get("lot", row.get("circuits_lot", 1))),
+                            default=1,
+                            cast_type=int,
+                        ),
                         "annual_demand": _parse_numeric(row.get("annual_demand", row.get("demand", 0)), default=0, cast_type=int),
                     },
                 )
@@ -514,8 +521,6 @@ def import_company_data(company, uploaded_file):
                     imported["routes"] += 1
                 else:
                     gamme_value = _first_non_empty(row, ["gamme", "routing", "route"])
-                    if not gamme_value:
-                        gamme_value = _first_non_empty(row, ["circuit"])
                     sequence = _split_sequence(gamme_value)
                     for order, machine_code in enumerate(sequence, start=1):
                         machine = _machine_from_code(company, machine_code)
