@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { GitBranchPlus, Route, Shuffle } from 'lucide-react';
+import { GitBranchPlus, Network, Route, Shuffle } from 'lucide-react';
 
 import { useAppData } from '../context/AppDataContext';
 import { getCellInsights, getChainonInsight } from '../services/csp';
@@ -90,7 +90,7 @@ export function ChainonPage() {
                             <span className="rounded-lg border border-[#4f8ef7]/20 bg-[#4f8ef7]/10 px-2.5 py-1 font-mono text-[#a3c0ff]">
                               {machine}
                             </span>
-                            {index < sequence.machines.length - 1 ? <span>→</span> : null}
+                            {index < sequence.machines.length - 1 ? <span>&rarr;</span> : null}
                           </div>
                         ))}
                       </div>
@@ -108,18 +108,35 @@ export function ChainonPage() {
                   <Shuffle className="h-4 w-4" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-white">Liaisons fortes</div>
-                  <div className="text-xs text-[#9299b0]">Seuil de force: {chainon.strongThreshold.toFixed(1)}</div>
+                  <div className="text-sm font-semibold text-white">Synthese chainon</div>
+                  <div className="text-xs text-[#9299b0]">Directeur: {chainon.director ?? 'Aucun'} | Ro: {chainon.ro.toFixed(2)}</div>
                 </div>
               </div>
 
-              <div className="space-y-3">
+              <div className="mb-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-[#2a3045] bg-[#0d0f14] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#636980]">Connectivite max</div>
+                  <div className="mt-2 text-2xl font-semibold text-white">{chainon.director ?? 'N/A'}</div>
+                  <div className="mt-1 text-sm text-[#9299b0]">
+                    {chainon.connectivity.find((entry) => entry.machine === chainon.director)?.score ?? 0} liaisons structurelles
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-[#2a3045] bg-[#0d0f14] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-[#636980]">Performance</div>
+                  <div className="mt-2 text-2xl font-semibold text-white">{(chainon.ro * 100).toFixed(0)}%</div>
+                  <div className="mt-1 text-sm text-[#9299b0]">
+                    Hors trame: {chainon.offGridLinks} | Croisements: {chainon.crossings}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-5 space-y-3">
                 {chainon.links.length ? (
                   chainon.links.map((link) => (
                     <div key={`${link.from}-${link.to}`} className="rounded-2xl border border-[#2a3045] bg-[#0d0f14] p-4">
                       <div className="mb-2 flex items-center justify-between">
                         <div className="font-mono text-sm text-white">
-                          {link.from} ↔ {link.to}
+                          {link.from} &rarr; {link.to}
                         </div>
                         <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${link.strong ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-500/15 text-slate-400'}`}>
                           {link.strong ? 'FORTE' : 'faible'}
@@ -140,41 +157,119 @@ export function ChainonPage() {
                   <div className="rounded-2xl border border-dashed border-[#2a3045] p-8 text-center text-[#9299b0]">Aucun chainon detecte.</div>
                 )}
               </div>
+
+              <div>
+                <div className="mb-3 text-sm font-semibold text-white">Connectivite des postes</div>
+                <div className="space-y-2">
+                  {chainon.connectivity.map((entry) => (
+                    <div key={entry.machine} className="flex items-center justify-between rounded-xl border border-[#2a3045] bg-[#0d0f14] px-3 py-2 text-sm">
+                      <span className={`font-mono ${entry.machine === chainon.director ? 'text-amber-300' : 'text-white'}`}>{entry.machine}</span>
+                      <span className="text-[#9299b0]">{entry.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
 
-          <section className="rounded-2xl border border-[#2a3045] bg-[#13161e] p-5">
-            <div className="mb-4 text-sm font-semibold text-white">Matrice des frequences de passage</div>
-            <div className="overflow-auto">
-              <table className="min-w-full border-collapse text-xs">
-                <thead>
-                  <tr>
-                    <th className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 text-left text-[#9299b0]">De / Vers</th>
-                    {chainon.machines.map((machine) => (
-                      <th key={machine} className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 font-mono text-[#4f8ef7]">
-                        {machine}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {chainon.machines.map((machine, rowIndex) => (
-                    <tr key={machine}>
-                      <td className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 font-mono font-semibold text-white">{machine}</td>
-                      {chainon.frequencyMatrix[rowIndex].map((value, columnIndex) => (
-                        <td
-                          key={`${machine}-${columnIndex}`}
-                          className={`border border-[#2a3045] px-4 py-3 text-center font-mono ${
-                            value > 0 ? 'text-emerald-400' : 'text-[#636980]'
-                          }`}
-                        >
-                          {rowIndex === columnIndex ? '—' : value}
-                        </td>
+          <section className="grid gap-6 xl:grid-cols-[1fr_1fr_0.9fr]">
+            <div className="rounded-2xl border border-[#2a3045] bg-[#13161e] p-5">
+              <div className="mb-4 text-sm font-semibold text-white">Matrice de structure</div>
+              <div className="overflow-auto">
+                <table className="min-w-full border-collapse text-xs">
+                  <thead>
+                    <tr>
+                      <th className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 text-left text-[#9299b0]">Poste</th>
+                      {chainon.machines.map((machine) => (
+                        <th key={machine} className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 font-mono text-amber-300">
+                          {machine}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {chainon.machines.map((machine, rowIndex) => (
+                      <tr key={machine}>
+                        <td className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 font-mono font-semibold text-white">{machine}</td>
+                        {chainon.structureMatrix[rowIndex].map((value, columnIndex) => (
+                          <td
+                            key={`${machine}-s-${columnIndex}`}
+                            className={`border border-[#2a3045] px-4 py-3 text-center font-mono ${
+                              value > 0 ? 'text-amber-300' : 'text-[#636980]'
+                            }`}
+                          >
+                            {rowIndex === columnIndex ? '—' : value}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[#2a3045] bg-[#13161e] p-5">
+              <div className="mb-4 text-sm font-semibold text-white">Matrice des frequences de passage</div>
+              <div className="overflow-auto">
+                <table className="min-w-full border-collapse text-xs">
+                  <thead>
+                    <tr>
+                      <th className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 text-left text-[#9299b0]">De / Vers</th>
+                      {chainon.machines.map((machine) => (
+                        <th key={machine} className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 font-mono text-[#4f8ef7]">
+                          {machine}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chainon.machines.map((machine, rowIndex) => (
+                      <tr key={machine}>
+                        <td className="border border-[#2a3045] bg-[#1a1e2a] px-4 py-3 font-mono font-semibold text-white">{machine}</td>
+                        {chainon.frequencyMatrix[rowIndex].map((value, columnIndex) => (
+                          <td
+                            key={`${machine}-${columnIndex}`}
+                            className={`border border-[#2a3045] px-4 py-3 text-center font-mono ${
+                              value > 0 ? 'text-emerald-400' : 'text-[#636980]'
+                            }`}
+                          >
+                            {rowIndex === columnIndex ? '—' : value}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[#2a3045] bg-[#13161e] p-5">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="rounded-xl bg-amber-500/15 p-2 text-amber-300">
+                  <Network className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-white">Implantation</div>
+                  <div className="text-xs text-[#9299b0]">Placement autour du poste directeur</div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {chainon.layout.map((placement) => (
+                  <div key={placement.machine} className="rounded-2xl border border-[#2a3045] bg-[#0d0f14] p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className={`font-mono text-sm ${placement.machine === chainon.director ? 'text-amber-300' : 'text-white'}`}>
+                        {placement.machine}
+                      </div>
+                      {placement.machine === chainon.director ? (
+                        <span className="rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300">DIRECTEUR</span>
+                      ) : null}
+                    </div>
+                    <div className="text-sm text-[#9299b0]">Position: ({placement.x}, {placement.y})</div>
+                    <div className="mt-1 text-sm text-[#9299b0]">Connectivite: {placement.connectivity}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         </>
