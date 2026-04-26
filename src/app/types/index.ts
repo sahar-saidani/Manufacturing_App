@@ -66,6 +66,9 @@ export interface CellBlock {
   column_start: number;
   column_end: number;
   cell_index: number;
+  products?: string[];
+  machines?: string[];
+  residual?: boolean;
 }
 
 export interface MachineAssignment {
@@ -118,6 +121,18 @@ export interface CompanyAnalytics {
   latest_analysis: KingAlgorithmResult | null;
 }
 
+export interface MatrixPreview {
+  machine_codes: string[];
+  product_references: string[];
+  matrix: number[][];
+}
+
+export interface KingImportResponse {
+  detail: string;
+  imported: Record<string, number>;
+  preview: MatrixPreview;
+}
+
 export interface Cell {
   id: number;
   code: string;
@@ -128,6 +143,9 @@ export interface Cell {
   row_end: number;
   column_start: number;
   column_end: number;
+  products?: string[];
+  machines?: string[];
+  residual?: boolean;
 }
 
 export interface DashboardMetrics {

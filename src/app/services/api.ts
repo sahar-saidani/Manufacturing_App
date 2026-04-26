@@ -3,6 +3,7 @@ import {
   Company,
   CompanyAnalytics,
   DashboardMetrics,
+  KingImportResponse,
   KingAlgorithmResult,
   Machine,
   MaterialFlow,
@@ -97,11 +98,24 @@ class ApiService {
     });
   }
 
-  async importFromFile(companyId: number, file: File): Promise<{ detail: string; imported: Record<string, number> }> {
+  async importFromFile(companyId: number, file: File): Promise<KingImportResponse> {
+    return this.importKingFromFile(companyId, file);
+  }
+
+  async importKingFromFile(companyId: number, file: File): Promise<KingImportResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request<KingImportResponse>(
+      `/companies/${companyId}/import-king/`,
+      { method: 'POST', body: formData, skipJsonHeader: true },
+    );
+  }
+
+  async importChainonFromFile(companyId: number, file: File): Promise<{ detail: string; imported: Record<string, number> }> {
     const formData = new FormData();
     formData.append('file', file);
     return this.request<{ detail: string; imported: Record<string, number> }>(
-      `/companies/${companyId}/import/`,
+      `/companies/${companyId}/import-chainon/`,
       { method: 'POST', body: formData, skipJsonHeader: true },
     );
   }
@@ -137,6 +151,9 @@ class ApiService {
         row_end: block.row_end,
         column_start: block.column_start,
         column_end: block.column_end,
+        products: block.products,
+        machines: block.machines,
+        residual: block.residual,
       };
     });
   }

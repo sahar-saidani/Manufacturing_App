@@ -1,23 +1,82 @@
 import { useState, type FormEvent } from 'react';
-import { Outlet, Link, useLocation } from 'react-router';
-import { Factory, LayoutDashboard, Workflow, Cpu, Map, Upload, RefreshCw, Building2 } from 'lucide-react';
+import { Link, Outlet, useLocation } from 'react-router';
+import {
+  ArrowUpDown,
+  Building2,
+  Factory,
+  GitBranchPlus,
+  LayoutDashboard,
+  Map,
+  RefreshCw,
+  Upload,
+  Workflow,
+  Wrench,
+} from 'lucide-react';
+
 import { Toaster } from './ui/sonner';
 import { useAppData } from '../context/AppDataContext';
 
+const navGroups = [
+  {
+    title: 'Donnees',
+    items: [
+      { path: '/import', label: 'Import Excel', icon: Upload, title: 'Import Excel', breadcrumb: 'Donnees' },
+    ],
+  },
+  {
+    title: 'Analyse',
+    items: [
+      {
+        path: '/king-algorithm',
+        label: 'Methode de King',
+        icon: Factory,
+        title: 'Methode de King (ROC)',
+        breadcrumb: 'Analyse',
+      },
+    ],
+  },
+  {
+    title: 'Optimisation',
+    items: [
+      { path: '/', label: 'Dashboard', icon: LayoutDashboard, title: 'Dashboard', breadcrumb: 'Optimisation' },
+      { path: '/chainon', label: 'Methode des Chainons', icon: GitBranchPlus, title: 'Methode des Chainons', breadcrumb: 'Optimisation' },
+      { path: '/factory-floor', label: 'Trame et Flux', icon: Map, title: 'Trame et Flux', breadcrumb: 'Visualisation' },
+    ],
+  },
+  {
+    title: 'References',
+    items: [
+      { path: '/gammes', label: 'Gammes', icon: Workflow, title: 'Gammes', breadcrumb: 'References' },
+      { path: '/machines', label: 'Machines', icon: Wrench, title: 'Machines', breadcrumb: 'References' },
+    ],
+  },
+];
+
+function getPageMeta(pathname: string) {
+  for (const group of navGroups) {
+    const exactMatch = group.items.find((item) => item.path === pathname);
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  if (pathname.startsWith('/import/king')) {
+    return { title: 'Import King', breadcrumb: 'Donnees', path: '/import', label: 'Import Excel', icon: Upload };
+  }
+
+  if (pathname.startsWith('/import/chainon')) {
+    return { title: 'Import Chainon', breadcrumb: 'Donnees', path: '/import', label: 'Import Excel', icon: Upload };
+  }
+
+  return { title: 'Interface CSP', breadcrumb: 'Application', path: '/', label: 'Dashboard', icon: LayoutDashboard };
+}
+
 export function RootLayout() {
   const location = useLocation();
-  const { companies, activeCompanyId, error, loading, refreshing, backendLabel, setActiveCompanyId, createCompany } =
+  const { companies, activeCompanyId, error, loading, refreshing, backendLabel, setActiveCompanyId, createCompany, analytics, cells } =
     useAppData();
   const [companyName, setCompanyName] = useState('');
-
-  const navItems = [
-    { path: '/', label: 'Tableau de bord', icon: LayoutDashboard },
-    { path: '/gammes', label: 'Gammes', icon: Workflow },
-    { path: '/machines', label: 'Machines', icon: Cpu },
-    { path: '/king-algorithm', label: 'Algorithme King', icon: Factory },
-    { path: '/factory-floor', label: "Plan d'usine", icon: Map },
-    { path: '/import', label: 'Importer', icon: Upload },
-  ];
+  const pageMeta = getPageMeta(location.pathname);
 
   const handleCreateCompany = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -25,105 +84,141 @@ export function RootLayout() {
     if (!trimmedName) {
       return;
     }
+
     try {
       await createCompany({ name: trimmedName });
       setCompanyName('');
     } catch {
-      // Error is surfaced by the shared context.
+      // The shared context already exposes the error state.
     }
   };
 
+  const statusLabel = cells.length
+    ? `${cells.length} ilot(s) detecte(s)`
+    : analytics
+      ? `${analytics.summary.machines}x${analytics.summary.products} chargee`
+      : 'Aucune donnee';
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="sticky top-0 z-50 border-b border-gray-200 bg-white">
-        <div className="px-6 py-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <Factory className="h-8 w-8 text-blue-600" />
-              <div>
-                <h1 className="text-xl font-semibold text-gray-900">Analyse de formation d'îlots</h1>
-                <p className="text-sm text-gray-500">Frontend React branché sur l'API Django</p>
+    <div className="min-h-screen bg-[#0d0f14] text-[#e8eaf2]">
+      <div className="fixed inset-y-0 left-0 hidden w-[220px] border-r border-[#2a3045] bg-[#13161e] lg:block">
+        <div className="border-b border-[#2a3045] px-5 py-5">
+          <div className="mb-2 inline-flex rounded-md bg-gradient-to-r from-[#4f8ef7] to-[#7c5cfc] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-white">
+            GI2B
+          </div>
+          <div className="text-sm font-semibold text-white">Implantation CSP</div>
+          <div className="mt-1 text-xs text-[#636980]">Cellules de production</div>
+        </div>
+
+        <div className="px-0 py-3">
+          {navGroups.map((group) => (
+            <div key={group.title} className="mb-4">
+              <div className="px-5 pb-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#636980]">
+                {group.title}
+              </div>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
+
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`mx-3 mb-1 flex items-center gap-3 rounded-lg border px-4 py-3 text-sm transition ${
+                      active
+                        ? 'border-[#4f8ef7]/30 bg-[#4f8ef7]/12 text-[#4f8ef7]'
+                        : 'border-transparent text-[#9299b0] hover:border-[#2a3045] hover:bg-[#1a1e2a] hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="lg:ml-[220px]">
+        <header className="sticky top-0 z-40 border-b border-[#2a3045] bg-[#13161e]/95 backdrop-blur">
+          <div className="flex flex-col gap-4 px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-white">{pageMeta.title}</div>
+              <div className="mt-1 flex items-center gap-2 text-xs text-[#636980]">
+                <span>GI2B</span>
+                <span>›</span>
+                <span>{pageMeta.breadcrumb}</span>
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 lg:items-end">
-              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                <Building2 className="h-4 w-4" />
-                <span>{backendLabel}</span>
-                {refreshing && <RefreshCw className="h-4 w-4 animate-spin" />}
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+                    cells.length
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : analytics
+                        ? 'bg-amber-500/15 text-amber-300'
+                        : 'bg-slate-500/15 text-slate-400'
+                  }`}
+                >
+                  {statusLabel}
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#363e55] bg-[#1a1e2a] px-3 py-1 text-xs text-[#9299b0]">
+                  <Building2 className="h-3.5 w-3.5" />
+                  {backendLabel}
+                  {refreshing && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                </span>
               </div>
 
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <select
-                  className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                  disabled={loading || !companies.length}
-                  value={activeCompanyId ?? ''}
-                  onChange={(event) => void setActiveCompanyId(Number(event.target.value))}
-                >
-                  {companies.length ? (
-                    companies.map((company) => (
-                      <option key={company.id} value={company.id}>
-                        {company.name}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">Aucune entreprise</option>
-                  )}
-                </select>
+              <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                <div className="relative">
+                  <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#636980]" />
+                  <select
+                    className="h-10 min-w-[220px] rounded-xl border border-[#363e55] bg-[#1a1e2a] pl-10 pr-3 text-sm text-[#e8eaf2] outline-none transition focus:border-[#4f8ef7]"
+                    disabled={loading || !companies.length}
+                    value={activeCompanyId ?? ''}
+                    onChange={(event) => void setActiveCompanyId(Number(event.target.value))}
+                  >
+                    {companies.length ? (
+                      companies.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">Aucune entreprise</option>
+                    )}
+                  </select>
+                </div>
 
                 <form className="flex gap-2" onSubmit={(event) => void handleCreateCompany(event)}>
                   <input
-                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                    className="h-10 min-w-[210px] rounded-xl border border-[#363e55] bg-[#1a1e2a] px-3 text-sm text-[#e8eaf2] outline-none transition placeholder:text-[#636980] focus:border-[#4f8ef7]"
                     placeholder="Nouvelle entreprise"
                     value={companyName}
                     onChange={(event) => setCompanyName(event.target.value)}
                   />
                   <button
                     type="submit"
-                    className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-blue-300"
+                    className="h-10 rounded-xl bg-gradient-to-r from-[#4f8ef7] to-[#7c5cfc] px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={!companyName.trim() || refreshing}
                   >
-                    Créer
+                    Creer
                   </button>
                 </form>
               </div>
+
+              {error ? <div className="text-xs text-red-400">{error}</div> : null}
             </div>
           </div>
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-        </div>
-      </header>
+        </header>
 
-      <nav className="border-b border-gray-200 bg-white">
-        <div className="px-6">
-          <div className="flex gap-1 overflow-x-auto">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.path;
-
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </nav>
-
-      <main className="p-6">
-        <div className="mx-auto max-w-7xl">
+        <main className="px-4 py-6 md:px-6">
           <Outlet />
-        </div>
-      </main>
+        </main>
+      </div>
 
       <Toaster />
     </div>

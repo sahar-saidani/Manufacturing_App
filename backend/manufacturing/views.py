@@ -14,12 +14,20 @@ from .serializers import (
     ProductSerializer,
     ProductWriteSerializer,
 )
-from .services import build_incidence_matrix, import_company_data, run_king_analysis
+from .services import build_incidence_matrix, execute_king_analysis, import_company_data, import_king_matrix_data
 
 
 class CompanyViewSet(viewsets.ModelViewSet):
     queryset = Company.objects.all()
     serializer_class = CompanySerializer
+
+    def _import_uploaded_file(self, request, company, label):
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"detail": "A CSV or Excel file is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        imported = import_company_data(company, uploaded_file)
+        return Response({"detail": f"{label} import completed.", "imported": imported}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get"])
     def analytics(self, request, pk=None):
@@ -55,18 +63,31 @@ class CompanyViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="import")
     def import_file(self, request, pk=None):
         company = self.get_object()
+        return self._import_uploaded_file(request, company, "Generic")
+
+    @action(detail=True, methods=["post"], url_path="import-king")
+    def import_king(self, request, pk=None):
+        company = self.get_object()
         uploaded_file = request.FILES.get("file")
         if not uploaded_file:
             return Response({"detail": "A CSV or Excel file is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        imported = import_company_data(company, uploaded_file)
-        return Response({"detail": "Import completed.", "imported": imported}, status=status.HTTP_200_OK)
+        try:
+            payload = import_king_matrix_data(company, uploaded_file)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "King import completed.", **payload}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="import-chainon")
+    def import_chainon(self, request, pk=None):
+        company = self.get_object()
+        return self._import_uploaded_file(request, company, "Chainon")
 
     @action(detail=True, methods=["post"], url_path="run-king")
     def run_king(self, request, pk=None):
         company = self.get_object()
         try:
-            analysis = run_king_analysis(company)
+            analysis = execute_king_analysis(company)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(KingAnalysisSerializer(analysis).data, status=status.HTTP_201_CREATED)
